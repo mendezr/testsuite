@@ -147,9 +147,9 @@ run has zero failures but proved nothing. `summary_icon()` in
 | anything else (`undefined`, `untested`, `other`) | ⚠️ |
 
 `skipped` counts as success because `@quarantine`/`@pending`/`@future` scenarios
-are intentionally not run. The job-summary step in `e2e.yml` calls
-`summary_icon(counts)` rather than inlining the comparison, so the rule is unit
-tested in `tests/unit/test_e2e_summary.py` instead of living only in YAML.
+are intentionally not run. The `e2e.yml` job-summary step and the `gnome-e2e`
+action's `Summarise results` step both call `summary_icon(counts)` rather than
+inlining it, so the rule is unit tested in `tests/unit/test_e2e_summary.py`, not only in YAML.
 
 ## Sparse checkout is non-cone — every script must be listed explicitly
 
