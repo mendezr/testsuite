@@ -97,7 +97,7 @@ For full control, use the composite action at `projectbluefin/testsuite/.github/
 
 ## Agentic factory
 
-This repo is agent-first: AI agents are primary maintainers of GNOME test coverage across both supported desktops (50 = Bluefin, 51 = gnomeos). Agents file issues and submit PRs directly within the gates defined in `docs/skills/meta/human-gates/SKILL.md`. Every session produces two outputs: the work and a skill-doc update. See `AGENTS.md` for the agent entry point and `docs/SKILL.md` for the skill router.
+This repo is agent-first: AI agents are primary maintainers of GNOME test coverage across both supported desktops (Bluefin and gnomeos). Agents file issues and submit PRs directly within the gates defined in `docs/skills/meta/human-gates/SKILL.md`. Every session produces two outputs: the work and a skill-doc update. See `AGENTS.md` for the agent entry point and `docs/SKILL.md` for the skill router.
 
 ## Further reading
 

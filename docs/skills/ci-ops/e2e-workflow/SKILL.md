@@ -151,10 +151,13 @@ are intentionally not run. The job-summary step in `e2e.yml` calls
 `summary_icon(counts)` rather than inlining the comparison, so the rule is unit
 tested in `tests/unit/test_e2e_summary.py` instead of living only in YAML.
 
-The summary heading in `e2e.yml` is **version-neutral** (`GNOME`, not
-`GNOME 50`): gnomeos tracks the current GNOME release and flips versions (e.g.
-50 → 51), so a pinned number would go stale. Do not re-insert a GNOME release
-number into the summary heading.
+The summary heading in `e2e.yml` omits the desktop and GNOME version entirely
+(`E2E Results — {suite}`), matching the precedent set in
+`.github/actions/gnome-e2e/action.yml`. gnomeos tracks the current GNOME release
+and flips versions (e.g. 50 → 51), so a pinned number would go stale — and the
+`e2e` job also runs KDE suites, so the heading must not claim a specific
+desktop. Do not re-insert a desktop name or GNOME release number into the
+summary heading.
 
 ## Sparse checkout is non-cone — every script must be listed explicitly
 
