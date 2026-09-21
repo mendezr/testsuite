@@ -143,15 +143,15 @@ run has zero failures but proved nothing. `summary_icon()` in
 | every counted scenario is `passed` or `skipped` | ✅ |
 | anything else (`undefined`, `untested`, `other`) | ⚠️ |
 
-`skipped` counts as success because `@quarantine`/`@pending`/`@future` scenarios
-are intentionally not run. The `e2e.yml` job-summary step and the `gnome-e2e`
-action's `Summarise results` step both call `summary_icon(counts)` rather than
-inlining it, so the rule is unit tested in `tests/unit/test_e2e_summary.py`, not only in YAML.
-`gnome-e2e` loads it **by file path** (`importlib.util.spec_from_file_location` on
-`_testsuite/scripts/e2e_summary.py`), never `from scripts.e2e_summary import ...`:
-the action runs in an arbitrary consumer workspace, where a consumer's own regular
-`scripts/` package (with `__init__.py`) shadows the checkout's namespace package
-whatever `sys.path` says, forcing the fail-closed `⚠️ Summary unavailable` path.
+`skipped` counts as success because `@quarantine`/`@pending`/`@future` scenarios are intentionally not run.
+The `e2e.yml` job-summary step and the `gnome-e2e` action's `Summarise results` step both call
+`summary_icon(counts)` rather than inlining it, so the rule is unit tested in `tests/unit/test_e2e_summary.py`,
+not only in YAML. `gnome-e2e` loads it **by file path** (`spec_from_file_location` on
+`_testsuite/scripts/e2e_summary.py`), never `from scripts.e2e_summary import ...`: the action runs in an
+arbitrary consumer workspace, where a consumer's own regular `scripts/` package (with `__init__.py`) shadows
+the checkout's namespace package whatever `sys.path` says, forcing the fail-closed `⚠️ Summary unavailable`
+path. That load catches bare `Exception` on purpose — `exec_module` runs the module's top level, so a corrupted
+copy raises `SyntaxError` or anything else, and this reporting-only step must exit 0 rather than fail the job.
 
 ## Sparse checkout is non-cone — every script must be listed explicitly
 

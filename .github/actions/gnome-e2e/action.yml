@@ -426,16 +426,25 @@ runs:
             count_scenarios = e2e_summary.count_scenarios
             is_success      = e2e_summary.is_success
             summary_icon    = e2e_summary.summary_icon
-        except (ImportError, OSError, AttributeError) as exc:
-            # Fail closed rather than render a headline we cannot justify.
-            print(f"ERROR: cannot import scripts.e2e_summary: {exc}", flush=True)
+        except Exception as exc:
+            # Fail closed rather than render a headline we cannot justify, and
+            # catch broadly on purpose: exec_module runs the module's top level,
+            # so a corrupted or incompatible e2e_summary.py can raise anything
+            # (SyntaxError included). This step is reporting-only and runs with
+            # `if: always()`; letting an exception escape would exit non-zero and
+            # fail the consumer's job over a summary we simply could not render.
+            print(
+                f"ERROR: cannot import scripts.e2e_summary: "
+                f"{type(exc).__name__}: {exc}",
+                flush=True,
+            )
             summary_file = os.environ.get("GITHUB_STEP_SUMMARY", "")
             if summary_file:
                 with open(summary_file, "a") as fh:
                     fh.write(
                         f"## ⚠️ E2E Results — `{suite}`\n\n"
-                        "Summary unavailable: `scripts/e2e_summary.py` was not "
-                        "present in the testsuite checkout.\n"
+                        "Summary unavailable: `scripts/e2e_summary.py` could not "
+                        "be loaded from the testsuite checkout.\n"
                     )
             sys.exit(0)
 

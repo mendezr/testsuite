@@ -115,13 +115,23 @@ def _run_summary(tmp_path: Path, scenarios: list[str], *, shadowing_package: boo
     return completed.stdout, summary
 
 
-def _run_summary_without_module(tmp_path: Path) -> tuple[str, str]:
-    """Same as :func:`_run_summary` but with no ``_testsuite`` checkout."""
+def _run_summary_without_module(tmp_path: Path, *, module_source: str | None = None) -> tuple[str, str]:
+    """Same as :func:`_run_summary` but without a usable ``_testsuite`` checkout.
+
+    With ``module_source`` set, the checkout exists but ships that text as
+    ``scripts/e2e_summary.py`` — standing in for a corrupted or incompatible
+    copy, whose failure surfaces only when ``exec_module`` runs it.
+    """
     results_dir = tmp_path / "results"
     results_dir.mkdir()
     (results_dir / "results.json").write_text(
         json.dumps([{"name": "f", "elements": [_scenario("passed")]}]), encoding="utf-8"
     )
+
+    if module_source is not None:
+        scripts_dir = tmp_path / "_testsuite" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "e2e_summary.py").write_text(module_source, encoding="utf-8")
 
     script = tmp_path / "summarise.py"
     script.write_text(_summarise_script(), encoding="utf-8")
@@ -207,6 +217,35 @@ def test_summary_is_unavailable_rather_than_green_without_the_shared_module(tmp_
 
     assert "ERROR: cannot import scripts.e2e_summary" in stdout
     assert summary.startswith("## ⚠️ E2E Results")
+
+
+def test_a_syntactically_broken_module_fails_closed_without_failing_the_job(tmp_path):
+    """``exec_module`` raises SyntaxError before any attribute lookup happens."""
+    stdout, summary = _run_summary_without_module(
+        tmp_path, module_source="def count_scenarios(data)\n    return {}\n"
+    )
+
+    assert "ERROR: cannot import scripts.e2e_summary" in stdout
+    assert "SyntaxError" in stdout
+    assert summary.startswith("## ⚠️ E2E Results")
+
+
+def test_a_module_raising_at_import_time_fails_closed_without_failing_the_job(tmp_path):
+    """Module-level code can raise anything; the step must still exit zero."""
+    stdout, summary = _run_summary_without_module(
+        tmp_path, module_source="raise RuntimeError('incompatible e2e_summary')\n"
+    )
+
+    assert "ERROR: cannot import scripts.e2e_summary" in stdout
+    assert "RuntimeError" in stdout
+    assert summary.startswith("## ⚠️ E2E Results")
+
+
+def test_the_import_guard_catches_every_exception(tmp_path):
+    """A narrow except list lets exec_module failures fail the consumer job."""
+    guard = _summarise_script().partition("spec_from_file_location")[2]
+
+    assert "except Exception as exc:" in guard
 
 
 # ── Structural guard: the step must consume the tested module, not restate it ─
