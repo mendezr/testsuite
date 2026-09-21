@@ -398,6 +398,7 @@ runs:
         GNOME_E2E_SUITE: ${{ inputs.suite }}
       run: |
         python3 - <<'PYEOF'
+        import importlib.util
         import json, os, sys
         from pathlib import Path
 
@@ -411,10 +412,21 @@ runs:
 
         # Single source of truth for what "passed" means: the unit-tested
         # scripts/e2e_summary.py, checked out into _testsuite by this action.
-        sys.path.insert(0, str(Path("_testsuite").resolve()))
+        # Load it by file path instead of `import scripts.e2e_summary`: this
+        # action runs in arbitrary consumer workspaces, and a regular
+        # `scripts/` package there (one with __init__.py) wins over the
+        # checkout's namespace package regardless of sys.path order.
+        module_path = Path("_testsuite/scripts/e2e_summary.py").resolve()
         try:
-            from scripts.e2e_summary import count_scenarios, is_success, summary_icon
-        except ImportError as exc:
+            spec = importlib.util.spec_from_file_location("e2e_summary", module_path)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"no loader for {module_path}")
+            e2e_summary = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(e2e_summary)
+            count_scenarios = e2e_summary.count_scenarios
+            is_success      = e2e_summary.is_success
+            summary_icon    = e2e_summary.summary_icon
+        except (ImportError, OSError, AttributeError) as exc:
             # Fail closed rather than render a headline we cannot justify.
             print(f"ERROR: cannot import scripts.e2e_summary: {exc}", flush=True)
             summary_file = os.environ.get("GITHUB_STEP_SUMMARY", "")
@@ -476,7 +488,7 @@ runs:
         print(f"\n{sep}", flush=True)
         print(
             f"E2E {status_word}: {passed} passed / {failed} failed / "
-            f"{skipped} skipped / +{counts['undefined']} undefined / "
+            f"{skipped} skipped / {counts['undefined']} undefined / "
             f"{counts['untested']} untested / {counts['other']} error-other "
             f"(total {total})",
             flush=True,

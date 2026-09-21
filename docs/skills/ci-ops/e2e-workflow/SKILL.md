@@ -107,32 +107,29 @@ Never derive `passed` by subtraction. `passed = total - failed - skipped` is wro
 on two counts:
 
 - `results.json` `elements` include **`background`** entries alongside `scenario`
-  entries, so `len(elements)` overstates the scenario total.
-- behave also emits `undefined` and `untested` statuses. Subtraction silently
-  folds both into `passed`, reporting unimplemented steps as successes.
+  ones, so `len(elements)` overstates the scenario total.
+- behave also emits `undefined`/`untested`; subtraction folds both into `passed`,
+  reporting unimplemented steps as successes.
 
 `count_scenarios()` filters to `element["type"] == "scenario"` and counts each of
-`passed`, `failed`, `skipped`, `undefined`, `untested` explicitly. Because it is
-consumed by the inline `python3` heredoc in the job-summary step,
-`scripts/e2e_summary.py` must be listed in the non-cone `sparse-checkout` block
-or the import fails at runtime.
+`passed`, `failed`, `skipped`, `undefined`, `untested` explicitly. Because the inline
+`python3` heredoc in the job-summary step consumes it, `scripts/e2e_summary.py` must
+be listed in the non-cone `sparse-checkout` block or the load fails at runtime.
 
 ### Unknown statuses land in `other` — never drop a scenario
 
-behave 1.3.3's `Scenario.compute_status()` can also return **`error`** (any
-errored step) and **`hook_error`** (a failed `before_scenario`/`after_scenario`
-hook). Filtering to a hardcoded status allowlist made those scenarios vanish
-from both the breakdown *and* the total, so a report of five scenarios could
-report `Total: 3`.
+behave 1.3.3's `Scenario.compute_status()` can also return **`error`** (any errored
+step) and **`hook_error`** (a failed `before_scenario`/`after_scenario` hook).
+Filtering to a hardcoded status allowlist made those scenarios vanish from both the
+breakdown *and* the total, so a five-scenario report could print `Total: 3`.
 
 `count_scenarios()` therefore counts **every** scenario element exactly once:
-known statuses under their own key, and anything else — `error`, `hook_error`,
-a missing `status` key, or any future behave status — under `other`. The
-invariant is `sum(counts.values()) == number of scenario elements`. Do not
-"fix" a new status by adding it to `SCENARIO_STATUSES` unless you also want it
-as its own summary column; the `other` bucket already guarantees nothing is
-lost. `scripts/assert_kde_passed.py` uses the same bucketing pattern — keep the
-two consistent.
+known statuses under their own key, and anything else — `error`, `hook_error`, a
+missing `status` key, or any future behave status — under `other`. The invariant is
+`sum(counts.values()) == number of scenario elements`. Do not "fix" a new status by
+adding it to `SCENARIO_STATUSES` unless you also want it as its own summary column;
+the `other` bucket already guarantees nothing is lost. `scripts/assert_kde_passed.py`
+uses the same bucketing pattern — keep the two consistent.
 
 ## Headline icon semantics: ✅ means "actually passed"
 
@@ -150,9 +147,13 @@ run has zero failures but proved nothing. `summary_icon()` in
 are intentionally not run. The `e2e.yml` job-summary step and the `gnome-e2e`
 action's `Summarise results` step both call `summary_icon(counts)` rather than
 inlining it, so the rule is unit tested in `tests/unit/test_e2e_summary.py`, not only in YAML.
+`gnome-e2e` loads it **by file path** (`importlib.util.spec_from_file_location` on
+`_testsuite/scripts/e2e_summary.py`), never `from scripts.e2e_summary import ...`:
+the action runs in an arbitrary consumer workspace, where a consumer's own regular
+`scripts/` package (with `__init__.py`) shadows the checkout's namespace package
+whatever `sys.path` says, forcing the fail-closed `⚠️ Summary unavailable` path.
 
 ## Sparse checkout is non-cone — every script must be listed explicitly
-
 
 The testsuite checkout in `e2e.yml` sets `sparse-checkout-cone-mode: false`. Per the
 `actions/checkout` docs, cone mode (the default) forwards patterns straight to
@@ -175,15 +176,14 @@ sparse-checkout-cone-mode: false
 Note that `scripts/` as a whole is **not** checked out — only the two named files are.
 
 **Rule: any script a job step invokes must be added to that job's `sparse-checkout`
-list in the same change.** This applies to extracting an inline heredoc into a
-standalone script, adding a new guard step, or reusing an existing repo script in a
-new place. Verify by reading the job's `sparse-checkout` block and confirming the
-exact path is listed — never assume `scripts/` is present because another script runs.
+list in the same change** — extracting an inline heredoc, adding a guard step, or
+reusing a repo script elsewhere. Verify by reading the job's `sparse-checkout` block
+and confirming the exact path is listed; never assume `scripts/` is present because
+another script runs.
 
-The silent-failure mode is what makes this dangerous: a missing script makes the step
-fail with a confusing "no such file" error, or, when the step is a guard that is
-allowed to soft-fail, the guard simply never runs and the problem it existed to catch
-ships undetected.
+The silent-failure mode is what makes this dangerous: a missing script fails the step
+with a confusing "no such file" error, or — when the step is a guard allowed to
+soft-fail — the guard never runs and the problem it existed to catch ships undetected.
 
 The same rule applies to every other non-cone checkout in this repo, including the
 `projectbluefin/iso` harness checkout in `.github/workflows/iso-validation.yml`.

@@ -69,8 +69,12 @@ def _clean_env(summary_file: Path) -> dict[str, str]:
     return env
 
 
-def _run_summary(tmp_path: Path, scenarios: list[str]) -> tuple[str, str]:
+def _run_summary(tmp_path: Path, scenarios: list[str], *, shadowing_package: bool = False) -> tuple[str, str]:
     """Run the shipped step script against a synthetic report.
+
+    When ``shadowing_package`` is set, a regular ``scripts/`` package is placed
+    in the working directory, standing in for a consumer repository that has
+    one of its own; the step must still load the checkout's module.
 
     Returns ``(stdout, job-summary markdown)``.
     """
@@ -84,6 +88,15 @@ def _run_summary(tmp_path: Path, scenarios: list[str]) -> tuple[str, str]:
     checkout = tmp_path / "_testsuite"
     checkout.mkdir()
     (checkout / "scripts").symlink_to(REPO_ROOT / "scripts", target_is_directory=True)
+
+    if shadowing_package:
+        shadow = tmp_path / "scripts"
+        shadow.mkdir()
+        (shadow / "__init__.py").write_text("", encoding="utf-8")
+        (shadow / "e2e_summary.py").write_text(
+            "raise AssertionError('consumer scripts/ package was imported')\n",
+            encoding="utf-8",
+        )
 
     script = tmp_path / "summarise.py"
     script.write_text(_summarise_script(), encoding="utf-8")
@@ -170,6 +183,24 @@ def test_failed_run_is_reported_as_failed(tmp_path):
     assert summary.startswith("## ❌ E2E Results")
 
 
+def test_consumer_scripts_package_does_not_shadow_the_checkout_module(tmp_path):
+    """gnome-e2e runs in arbitrary workspaces; a local scripts/ must not win."""
+    stdout, summary = _run_summary(
+        tmp_path, ["undefined", "undefined"], shadowing_package=True
+    )
+
+    assert "E2E INCOMPLETE" in stdout
+    assert "Summary unavailable" not in summary
+    assert summary.startswith("## ⚠️ E2E Results")
+
+
+def test_headline_counts_are_rendered_without_stray_prefixes(tmp_path):
+    stdout, _ = _run_summary(tmp_path, ["passed", "undefined"])
+
+    assert "1 undefined" in stdout
+    assert "+1 undefined" not in stdout
+
+
 def test_summary_is_unavailable_rather_than_green_without_the_shared_module(tmp_path):
     """Fail closed: no importable module, no justification for a headline."""
     stdout, summary = _run_summary_without_module(tmp_path)
@@ -184,9 +215,25 @@ def test_summary_is_unavailable_rather_than_green_without_the_shared_module(tmp_
 def test_step_imports_the_tested_summary_module():
     step = _summarise_step()
 
-    assert "from scripts.e2e_summary import" in step
+    assert "_testsuite/scripts/e2e_summary.py" in step
+    assert "spec_from_file_location" in step
     for helper in ("count_scenarios", "is_success", "summary_icon"):
         assert helper in step
+
+
+def test_step_loads_the_module_by_path_not_by_package_name():
+    """A consumer repo's own ``scripts/`` package must not shadow the module."""
+    statements = [
+        line.strip()
+        for line in _summarise_script().splitlines()
+        if not line.lstrip().startswith("#")
+    ]
+
+    assert not [
+        line
+        for line in statements
+        if line.startswith(("import scripts", "from scripts"))
+    ]
 
 
 def test_step_does_not_reimplement_counting_or_the_headline():
