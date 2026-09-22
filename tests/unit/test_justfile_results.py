@@ -4,10 +4,11 @@ The local ``just results`` path must not render a green check for a run with
 zero passing scenarios (an all-``undefined`` report), and ``Background:``
 elements must not inflate the scenario totals. These tests shell out to
 ``just`` so the Justfile itself — not only the ``scripts/e2e_summary.py``
-helpers it is required to call — is under test. They are skipped wherever
-``just`` is not installed (e.g. the unit-test CI image) and never touch the
-default ``/var/tmp/bluefin-results`` root: ``RESULTS_BASE`` is pointed at
-``tmp_path`` for every invocation.
+helpers it is required to call — is under test. Outside CI they skip when
+``just`` is absent; in CI ``unit-tests.yml`` installs a pinned ``just`` and
+these tests run (a missing binary must fail the job, not silently skip the
+contract). They never touch the default ``/var/tmp/bluefin-results`` root:
+``RESULTS_BASE`` is pointed at ``tmp_path`` for every invocation.
 """
 
 from __future__ import annotations
@@ -22,8 +23,13 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+# Skip only on developer machines without `just`. In CI (`CI` set), unit-tests.yml
+# installs a pinned binary; if it were ever missing the tests must run and fail
+# rather than skip — otherwise this contract would stop being enforced silently.
 pytestmark = pytest.mark.skipif(
-    shutil.which("just") is None, reason="just is not installed"
+    shutil.which("just") is None and os.environ.get("CI", "").lower()
+    not in ("1", "true"),
+    reason="just is not installed",
 )
 
 
